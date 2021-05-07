@@ -111,6 +111,12 @@ class TrainModelCommand(TextAttackCommand):
             help="Attack recipe to use (enables adversarial training)",
         )
         parser.add_argument(
+            "--attack-from-file",
+            type=str,
+            default=None,
+            help="Attack to load from file",
+        )
+        parser.add_argument(
             "--check-robustness",
             default=False,
             action="store_true",

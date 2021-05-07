@@ -221,8 +221,11 @@ def parse_attack_from_args(args):
             raise ValueError(
                 f"Loaded `{attack_file}` but could not find `{attack_name}`."
             )
-        attack_func = getattr(attack_module, attack_name)
-        return attack_func(model)
+        recipe = getattr(attack_module, attack_name)
+        try:
+            return recipe(model)
+        except:
+            return recipe.build(model)
     else:
         goal_function = parse_goal_function_from_args(args, model)
         transformation = parse_transformation_from_args(args, model)

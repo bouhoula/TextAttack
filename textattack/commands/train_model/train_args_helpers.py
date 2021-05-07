@@ -1,4 +1,6 @@
+import importlib
 import os
+import time
 
 import textattack
 from textattack.commands.attack.attack_args import ATTACK_RECIPE_NAMES
@@ -6,6 +8,10 @@ from textattack.commands.attack.attack_args_helpers import ARGS_SPLIT_TOKEN
 from textattack.commands.augment import AUGMENTATION_RECIPE_NAMES
 
 logger = textattack.shared.logger
+
+# The split token allows users to optionally pass multiple arguments in a single
+# parameter by separating them with the split token.
+ARGS_SPLIT_TOKEN = "^"
 
 
 def prepare_dataset_for_training(datasets_dataset):
@@ -140,6 +146,20 @@ def model_from_args(train_args, num_labels, model_path=None):
     return model
 
 
+def load_module_from_file(file_path):
+    """Uses ``importlib`` to dynamically open a file and load an object from
+    it."""
+    temp_module_name = f"temp_{time.time()}"
+    colored_file_path = textattack.shared.utils.color_text(
+        file_path, color="blue", method="ansi"
+    )
+    textattack.shared.logger.info(f"Loading module from `{colored_file_path}`.")
+    spec = importlib.util.spec_from_file_location(temp_module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def attack_from_args(args):
     # note that this returns a recipe type, not an object
     # (we need to wait to have access to the model to initialize)
@@ -149,11 +169,22 @@ def attack_from_args(args):
             attack_class = eval(ATTACK_RECIPE_NAMES[args.attack])
         else:
             raise ValueError(f"Unrecognized attack recipe: {args.attack}")
+    elif args.attack_from_file:
+        if ARGS_SPLIT_TOKEN in args.attack_from_file:
+            attack_file, attack_name = args.attack_from_file.split(ARGS_SPLIT_TOKEN)
+        else:
+            attack_file, attack_name = args.attack_from_file, "attack"
+        attack_module = load_module_from_file(attack_file)
+        if not hasattr(attack_module, attack_name):
+            raise ValueError(
+                f"Loaded `{attack_file}` but could not find `{attack_name}`."
+            )
+        attack_class = getattr(attack_module, attack_name)
 
     # check attack-related args
     assert args.num_clean_epochs > 0, "--num-clean-epochs must be > 0"
     assert not (
-        args.check_robustness and not (args.attack)
+        args.check_robustness and (not (args.attack) or not (args.attack_from_file))
     ), "--check_robustness must be used with --attack"
 
     return attack_class
